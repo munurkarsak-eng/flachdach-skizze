@@ -7,7 +7,7 @@
 select{width:100%;box-sizing:border-box;margin-top:8px;padding:12px;font-size:17px;border:1px solid #b8c0c8;border-radius:8px;background:white}</style></head><body>
 <div class="app"><div class="card"><h1>Flachdach-Skizze</h1>
 <p class="sub">Punkte setzen → P1 zum Schließen. Kante antippen = Maß · Eckpunkt ziehen = Form · freie Fläche ziehen = Ansicht.</p>
-<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-G1</span></div>
+<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-H</span></div>
 <div class="wrap"><canvas id="cv" width="1000" height="800"></canvas></div>
 <div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Winkel anpassen</button><button id="attikaBtn">▤ Attika</button><button id="objBtn">＋ Bauteile</button><button id="measureBtn">📏 Maßband</button></div>
 <div id="status" class="status">P1 setzen.</div></div></div>
@@ -96,8 +96,12 @@ function orthogonalize(){
  pts=cand;inferOrthogonalMeasures();status.textContent="Geometrie angepasst: Maße beibehalten, rechtwinklige Ecken ausgerichtet.";draw()
 }
 function add(p){p=snap(p);if(pts.length>=3&&dist(p,pts[0])<csspx(32)){closed=true;status.textContent="Kontur geschlossen – Kante direkt antippen.";draw();return}pts.push(p);status.textContent="P"+pts.length+" gesetzt.";draw()}
-function openEdge(i){active=i;mtitle.textContent="K"+(i+1)+" – Länge in m";mlen.value=measures[i]||"";modal.classList.add("show");setTimeout(()=>mlen.focus(),60)}
-function close(){modal.classList.remove("show");active=-1}
+function resetPointerState(){
+ for(const id of pointers.keys()){try{if(cv.hasPointerCapture(id))cv.releasePointerCapture(id)}catch(e){}}
+ pointers.clear();gesture=null;pinch=null
+}
+function openEdge(i){resetPointerState();active=i;mtitle.textContent="K"+(i+1)+" – Länge in m";mlen.value=measures[i]||"";modal.classList.add("show");setTimeout(()=>mlen.focus(),60)}
+function close(){modal.classList.remove("show");active=-1;resetPointerState()}
 cv.addEventListener("pointerdown",e=>{
  e.preventDefault();
  const sp=screen(e);pointers.set(e.pointerId,sp);cv.setPointerCapture(e.pointerId);
@@ -148,7 +152,22 @@ function tapeEdge(i){
  else if(i!==tape.base){tape.target=i;status.textContent=`K${tape.base+1} bleibt fest. Ziel K${i+1}.`}
  draw();return true
 }
-document.getElementById("save").onclick=()=>{if(active<0)return;const i=active,v=mlen.value.trim();modal.classList.remove("show");active=-1;if(v&&!Number.isFinite(num(v))){status.textContent="Bitte gültige Länge eingeben.";draw();return}measures[i]=v;if(v){const j=mate(i);if(j>=0&&!measures[j])measures[j]=v;inferOrthogonalMeasures();rebuildFromMeasures(i);inferOrthogonalMeasures()}status.textContent=v?"K"+(i+1)+" = "+v.replace(".",",")+" m übernommen.":"Maß gelöscht.";requestAnimationFrame(draw)};
+document.getElementById("save").onclick=(e)=>{
+ e.preventDefault();e.stopPropagation();
+ if(active<0)return;
+ const i=active,v=mlen.value.trim(),n=num(v);
+ if(v&&(!Number.isFinite(n)||n<=0)){status.textContent="Bitte gültige Länge eingeben.";return}
+ modal.classList.remove("show");active=-1;resetPointerState();
+ measures[i]=v;
+ if(v){
+   const j=mate(i);if(j>=0&&!measures[j])measures[j]=v;
+   inferOrthogonalMeasures();
+   rebuildFromMeasures(i);
+   inferOrthogonalMeasures()
+ }
+ status.textContent=v?`K${i+1} = ${v.replace(".",",")} m übernommen.`:"Maß gelöscht.";
+ draw()
+};
 document.getElementById("cancel").onclick=close;modal.addEventListener("pointerdown",e=>{if(e.target===modal)close()});mlen.addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("save").click()});
 document.getElementById("undo").onclick=()=>{if(closed)closed=false;else pts.pop();measures=measures.slice(0,pts.length);draw()};document.getElementById("clear").onclick=()=>{pts=[];measures=[];closed=false;view={s:1,ox:0,oy:0};status.textContent="P1 setzen.";draw()};
 function zoom(f){const cx=cv.width/2,cy=cv.height/2,ns=Math.max(.3,Math.min(4,view.s*f));view.ox=cx-(cx-view.ox)*ns/view.s;view.oy=cy-(cy-view.oy)*ns/view.s;view.s=ns;draw()}document.getElementById("zin").onclick=()=>zoom(1.25);document.getElementById("zout").onclick=()=>zoom(.8);
