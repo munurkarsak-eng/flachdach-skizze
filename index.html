@@ -7,7 +7,7 @@
 </style></head><body>
 <div class="app"><div class="card"><h1>Flachdach-Skizze</h1>
 <p class="sub">Punkte setzen → P1 zum Schließen. Kante antippen = Maß · Eckpunkt ziehen = Form · freie Fläche ziehen = Ansicht.</p>
-<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-C</span></div>
+<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-D</span></div>
 <div class="wrap"><canvas id="cv" width="1000" height="800"></canvas></div>
 <div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Einpassen</button></div>
 <div id="status" class="status">P1 setzen.</div></div></div>
@@ -74,35 +74,7 @@ function rebuildFromMeasures(anchor=0){
  for(let step=0;step<pts.length;step++)rebuilt[(anchor+step)%pts.length]=next[step];
  pts=rebuilt
 }
-function draw(){ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle="#fff";ctx.fillRect(0,0,cv.width,cv.height);ctx.save();ctx.translate(view.ox,view.oy);ctx.scale(view.s,view.s);ctx.strokeStyle="#e6e8eb";ctx.lineWidth=1/view.s;for(let q=-2000;q<3000;q+=STEP){ctx.beginPath();ctx.moveTo(q,-2000);ctx.lineTo(q,3000);ctx.stroke();ctx.beginPath();ctx.moveTo(-2000,q);ctx.lineTo(3000,q);ctx.stroke()}if(pts.length>1){const n=closed?pts.length:pts.length-1;for(let i=0;i<n;i++){const e=E(i);ctx.strokeStyle=measures[i]?"#16823b":"#202938";ctx.lineWidth=(measures[i]?9:7)/view.s;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(e.a.x,e.a.y);ctx.lineTo(e.b.x,e.b.y);ctx.stroke()}}ctx.font=`bold ${20/view.s}px Arial`;pts.forEach((p,i)=>{ctx.fillStyle="#202938";ctx.beginPath();ctx.arc(p.x,p.y,11/view.s,0,Math.PI*2);ctx.fill();ctx.fillStyle="#111";ctx.fillText("P"+(i+1),p.x+15/view.s,p.y-16/view.s)});if(closed){const c=center();for(let i=0;i<pts.length;i++){const e=E(i),mx=(e.a.x+e.b.x)/2,my=(e.a.y+e.b.y)/2;let nx=-e.uy,ny=e.ux;if((mx+nx*20-c.x)**2+(my+ny*20-c.y)**2<(mx-nx*20-c.x)**2+(my-ny*20-c.y)**2){nx=-nx;ny=-ny}const t="K"+(i+1)+(measures[i]?" · "+String(measures[i]).replace(".",",")+" m":"");ctx.font=`bold ${17/view.s}px Arial`;const tx=mx+nx*34/view.s,ty=my+ny*34/view.s,w=ctx.measureText(t).width+12/view.s;ctx.fillStyle="#fffffff0";ctx.fillRect(tx-w/2,ty-18/view.s,w,23/view.s);ctx.fillStyle=measures[i]?"#16823b":"#202938";ctx.textAlign="center";ctx.fillText(t,tx,ty);ctx.textAlign="start"}}
-if(closed){const cc=center();pts.forEach((p,i)=>{const a=angleAt(i);if(a==null)return;let vx=cc.x-p.x,vy=cc.y-p.y,L=Math.hypot(vx,vy)||1;vx/=L;vy/=L;const text=(Math.abs(a-Math.round(a))<.05?Math.round(a):a.toFixed(1).replace(".",","))+"°";ctx.font=`bold ${15/view.s}px Arial`;ctx.textAlign="center";ctx.fillStyle="#8a3d00";ctx.fillText(text,p.x+vx*42/view.s,p.y+vy*42/view.s);ctx.textAlign="start"})}
-ctx.restore()}
-
-function fitView(){
- if(!pts.length){view={s:1,ox:0,oy:0};draw();return}
- const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
- const w=Math.max(1,maxx-minx),h=Math.max(1,maxy-miny),pad=110;
- view.s=Math.max(.25,Math.min(4,Math.min((cv.width-2*pad)/w,(cv.height-2*pad)/h)));
- view.ox=(cv.width-w*view.s)/2-minx*view.s;
- view.oy=(cv.height-h*view.s)/2-miny*view.s;
- draw()
-}
-function beginPinch(){
- if(pointers.size!==2)return;
- const a=[...pointers.values()],p1=a[0],p2=a[1];
- const cx=(p1.x+p2.x)/2,cy=(p1.y+p2.y)/2,dd=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
- pinch={d:dd,s:view.s,cx,cy,wx:(cx-view.ox)/view.s,wy:(cy-view.oy)/view.s};
- gesture=null
-}
-function updatePinch(){
- if(!pinch||pointers.size!==2)return;
- const a=[...pointers.values()],p1=a[0],p2=a[1];
- const cx=(p1.x+p2.x)/2,cy=(p1.y+p2.y)/2,dd=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
- view.s=Math.max(.25,Math.min(5,pinch.s*dd/pinch.d));
- view.ox=cx-pinch.wx*view.s;view.oy=cy-pinch.wy*view.s;draw()
-}
-
-function add(p){p=snap(p);if(pts.length>=3&&dist(p,pts[0])<csspx(32)){closed=true;status.textContent="Kontur geschlossen – Kante direkt antippen.";draw();return}pts.push(p);status.textContent="P"+pts.length+" gesetzt.";draw()}
+function draw(){ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle="#fff";ctx.fillRect(0,0,cv.width,cv.height);ctx.save();ctx.translate(view.ox,view.oy);ctx.scale(view.s,view.s);ctx.strokeStyle="#e6e8eb";ctx.lineWidth=1/view.s;for(let q=-2000;q<3000;q+=STEP){ctx.beginPath();ctx.moveTo(q,-2000);ctx.lineTo(q,3000);ctx.stroke();ctx.beginPath();ctx.moveTo(-2000,q);ctx.lineTo(3000,q);ctx.stroke()}if(pts.length>1){const n=closed?pts.length:pts.length-1;for(let i=0;i<n;i++){const e=E(i);ctx.strokeStyle=measures[i]?"#16823b":"#202938";ctx.lineWidth=measures[i]?7:5;ctx.beginPath();ctx.moveTo(e.a.x,e.a.y);ctx.lineTo(e.b.x,e.b.y);ctx.stroke()}}ctx.font="bold 18px Arial";pts.forEach((p,i)=>{ctx.fillStyle="#202938";ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.fillStyle="#111";ctx.fillText("P"+(i+1),p.x+12,p.y-12)});if(closed){const c=center();for(let i=0;i<pts.length;i++){const e=E(i),mx=(e.a.x+e.b.x)/2,my=(e.a.y+e.b.y)/2;let nx=-e.uy,ny=e.ux;if((mx+nx*30-c.x)**2+(my+ny*30-c.y)**2<(mx-nx*30-c.x)**2+(my-ny*30-c.y)**2){nx=-nx;ny=-ny}const off=45,ax=e.a.x+nx*off,ay=e.a.y+ny*off,bx=e.b.x+nx*off,by=e.b.y+ny*off;ctx.strokeStyle=measures[i]?"#16823b":"#374151";ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(e.a.x+nx*12,e.a.y+ny*12);ctx.lineTo(ax,ay);ctx.moveTo(e.b.x+nx*12,e.b.y+ny*12);ctx.lineTo(bx,by);ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();const ah=10,aw=5;function ar(x,y,dx,dy){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx*ah-dy*aw,y+dy*ah+dx*aw);ctx.lineTo(x+dx*ah+dy*aw,y+dy*ah-dx*aw);ctx.closePath();ctx.fill()}ar(ax,ay,e.ux,e.uy);ar(bx,by,-e.ux,-e.uy);const t="K"+(i+1)+(measures[i]?" · "+String(measures[i]).replace(".",",")+" m":"");ctx.font="bold 18px Arial";ctx.textAlign="center";ctx.textBaseline="middle";const tx=(ax+bx)/2+nx*15,ty=(ay+by)/2+ny*15,w=ctx.measureText(t).width+12;ctx.fillStyle="rgba(255,255,255,.94)";ctx.fillRect(tx-w/2,ty-12,w,24);ctx.fillStyle=measures[i]?"#16823b":"#374151";ctx.fillText(t,tx,ty);ctx.textAlign="start"}const cc=center();pts.forEach((p,i)=>{const ang=angleAt(i);if(ang==null)return;const prev=pts[(i-1+pts.length)%pts.length],next=pts[(i+1)%pts.length];let u={x:prev.x-p.x,y:prev.y-p.y},v={x:next.x-p.x,y:next.y-p.y},lu=Math.hypot(u.x,u.y)||1,lv=Math.hypot(v.x,v.y)||1;u.x/=lu;u.y/=lu;v.x/=lv;v.y/=lv;let bx=u.x+v.x,by=u.y+v.y,bl=Math.hypot(bx,by)||1;bx/=bl;by/=bl;if((p.x+bx*40-cc.x)**2+(p.y+by*40-cc.y)**2>(p.x-bx*40-cc.x)**2+(p.y-by*40-cc.y)**2){bx=-bx;by=-by}const r=28,a1=Math.atan2(u.y,u.x),a2=Math.atan2(v.y,v.x);let d=(a2-a1+Math.PI*2)%(Math.PI*2);if(d>Math.PI)d-=Math.PI*2;ctx.strokeStyle="#a64b00";ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(p.x,p.y,r,a1,a1+d,d<0);ctx.stroke();const text=(Math.abs(ang-Math.round(ang))<.05?Math.round(ang):ang.toFixed(1).replace(".",","))+"°";ctx.font="bold 20px Arial";ctx.textAlign="center";ctx.textBaseline="middle";const tx=p.x+bx*58,ty=p.y+by*58,w=ctx.measureText(text).width+12;ctx.fillStyle="rgba(255,255,255,.94)";ctx.fillRect(tx-w/2,ty-13,w,26);ctx.fillStyle="#8a3d00";ctx.fillText(text,tx,ty);ctx.textAlign="start"})}ctx.restore()}function add(p){p=snap(p);if(pts.length>=3&&dist(p,pts[0])<csspx(32)){closed=true;status.textContent="Kontur geschlossen – Kante direkt antippen.";draw();return}pts.push(p);status.textContent="P"+pts.length+" gesetzt.";draw()}
 function openEdge(i){active=i;mtitle.textContent="K"+(i+1)+" – Länge in m";mlen.value=measures[i]||"";modal.classList.add("show");setTimeout(()=>mlen.focus(),60)}
 function close(){modal.classList.remove("show");active=-1}
 cv.addEventListener("pointerdown",e=>{
