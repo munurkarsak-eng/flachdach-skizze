@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Flachdach-Skizze Neu</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;font-family:Arial,sans-serif;color:#202938}.app{max-width:820px;margin:auto;padding:8px}.card{background:#fff;border:1px solid #ccd2d8;border-radius:16px;padding:10px}h1{font-size:23px;margin:0 0 4px}.sub{font-size:14px;color:#5d6672;margin:0 0 9px}.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.top input{width:80px;height:42px;font-size:19px;padding:6px}.wrap{border:2px solid #cbd1d7;border-radius:14px;overflow:hidden;background:#fff}canvas{display:block;width:100%;aspect-ratio:1.18/1;touch-action:none}.tools{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}button{min-height:42px;padding:8px 11px;font-size:15px}.status{min-height:22px;margin-top:8px;font-size:14px;color:#59636e}.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#0007;z-index:999;padding:16px}.modal.show{display:flex}.box{width:min(420px,100%);background:#fff;border-radius:16px;padding:17px}.box h2{margin:0 0 12px}.box input{width:100%;height:52px;font-size:24px;padding:8px}.actions{display:flex;gap:8px;margin-top:12px}.actions button{flex:1}.version{font-size:12px;font-weight:bold;background:#e8f1ff;padding:5px 8px;border-radius:8px}
+</style></head><body>
+<div class="app"><div class="card"><h1>Flachdach-Skizze</h1>
+<p class="sub">Punkte setzen → P1 zum Schließen. Kante antippen = Maß · Eckpunkt ziehen = Form · freie Fläche ziehen = Ansicht.</p>
+<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-C</span></div>
+<div class="wrap"><canvas id="cv" width="1000" height="800"></canvas></div>
+<div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Einpassen</button></div>
+<div id="status" class="status">P1 setzen.</div></div></div>
+<div id="modal" class="modal"><div class="box"><h2 id="mtitle">Kante – Länge</h2><input id="mlen" inputmode="decimal" placeholder="z. B. 12,00"><div class="actions"><button id="cancel">Abbrechen</button><button id="save">Übernehmen</button></div></div></div>
+<script>
+(()=>{"use strict";
+const cv=document.getElementById("cv"),ctx=cv.getContext("2d"),status=document.getElementById("status"),modal=document.getElementById("modal"),mlen=document.getElementById("mlen"),mtitle=document.getElementById("mtitle");
+let pts=[],closed=false,measures=[],gesture=null,active=-1,view={s:1,ox:0,oy:0};const STEP=50;const pointers=new Map();let pinch=null;
+const num=v=>Number(String(v||"").replace(",",".")),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function screen(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}}
+function world(e){const p=screen(e);return{x:(p.x-view.ox)/view.s,y:(p.y-view.oy)/view.s}}
+function csspx(v){return v*cv.width/cv.getBoundingClientRect().width/view.s}
+function snap(p){return{x:Math.round(p.x/STEP)*STEP,y:Math.round(p.y/STEP)*STEP}}
+function E(i){const a=pts[i],b=pts[(i+1)%pts.length],dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1;return{a,b,L,ux:dx/L,uy:dy/L}}
+function seg(p,a,b){const vx=b.x-a.x,vy=b.y-a.y,l=vx*vx+vy*vy||1;let t=((p.x-a.x)*vx+(p.y-a.y)*vy)/l;t=Math.max(0,Math.min(1,t));return{t,d:dist(p,{x:a.x+t*vx,y:a.y+t*vy})}}
+function pointHit(p){let z=-1,b=csspx(24);pts.forEach((q,i)=>{const v=dist(p,q);if(v<b){b=v;z=i}});return z}
+function edgeHit(p){if(!closed)return-1;let z=-1,b=csspx(30);pts.forEach((a,i)=>{const q=seg(p,a,pts[(i+1)%pts.length]);if(q.t>.1&&q.t<.9&&q.d<b){b=q.d;z=i}});return z}
+function mpp(){const a=[];measures.forEach((m,i)=>{if(num(m)>0&&pts[i])a.push(num(m)/E(i).L)});if(a.length){a.sort((a,b)=>a-b);return a[Math.floor(a.length/2)]}const g=num(document.getElementById("grid").value);return(g>0?g:1)/STEP}
+function mate(i){if(!closed||pts.length<4)return-1;const a=E(i);let best=-1,score=1e9;for(let j=0;j<pts.length;j++){if(j===i||j===(i+1)%pts.length||i===(j+1)%pts.length)continue;const b=E(j),par=Math.abs(a.ux*b.uy-a.uy*b.ux),rel=Math.abs(a.L-b.L)/Math.max(a.L,b.L);if(par>.055||rel>.04)continue;const s=par*10+rel;if(s<score){score=s;best=j}}return best}
+function center(){return pts.reduce((a,p)=>({x:a.x+p.x/pts.length,y:a.y+p.y/pts.length}),{x:0,y:0})}
+function angleAt(i){
+ if(!closed||pts.length<3)return null;
+ const a=pts[(i-1+pts.length)%pts.length],b=pts[i],c=pts[(i+1)%pts.length];
+ const v1={x:a.x-b.x,y:a.y-b.y},v2={x:c.x-b.x,y:c.y-b.y};
+ const l1=Math.hypot(v1.x,v1.y),l2=Math.hypot(v2.x,v2.y);if(!l1||!l2)return null;
+ const small=Math.acos(Math.max(-1,Math.min(1,(v1.x*v2.x+v1.y*v2.y)/(l1*l2))))*180/Math.PI;
+ let area=0;for(let k=0;k<pts.length;k++){const q=pts[k],r=pts[(k+1)%pts.length];area+=q.x*r.y-r.x*q.y}
+ const cross=v1.x*v2.y-v1.y*v2.x;
+ const reflex=(area>0&&cross>0)||(area<0&&cross<0);
+ return reflex?360-small:small
+}
+function dirClass(i){
+ const e=E(i),ax=Math.abs(e.ux),ay=Math.abs(e.uy);
+ if(ax>.985)return{axis:"x",sign:Math.sign(e.ux)||1};
+ if(ay>.985)return{axis:"y",sign:Math.sign(e.uy)||1};
+ return null
+}
+function inferOrthogonalMeasures(){
+ if(!closed)return;
+ ["x","y"].forEach(axis=>{
+  let known=0,unknown=[];
+  for(let i=0;i<pts.length;i++){
+   const d=dirClass(i);if(!d||d.axis!==axis)continue;
+   const v=num(measures[i]);
+   if(v>0)known+=d.sign*v;else unknown.push({i,sign:d.sign})
+  }
+  if(unknown.length===1){
+   const u=unknown[0],v=-known/u.sign;
+   if(v>0.0001)measures[u.i]=v.toFixed(2).replace(/\.00$/,"").replace(".",",")
+  }
+ })
+}
+function rebuildFromMeasures(anchor=0){
+ if(!closed||pts.length<3)return;
+ const scale=mpp();if(!(scale>0))return;
+ const old=pts.map(q=>({...q})),next=[{...old[anchor]}];
+ for(let step=0;step<pts.length-1;step++){
+  const i=(anchor+step)%pts.length,a=old[i],b=old[(i+1)%pts.length];
+  const dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1,wanted=num(measures[i]);
+  const len=wanted>0?wanted/scale:L,prev=next[next.length-1];
+  next.push({x:prev.x+dx/L*len,y:prev.y+dy/L*len})
+ }
+ const rebuilt=Array(pts.length);
+ for(let step=0;step<pts.length;step++)rebuilt[(anchor+step)%pts.length]=next[step];
+ pts=rebuilt
+}
+function draw(){ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle="#fff";ctx.fillRect(0,0,cv.width,cv.height);ctx.save();ctx.translate(view.ox,view.oy);ctx.scale(view.s,view.s);ctx.strokeStyle="#e6e8eb";ctx.lineWidth=1/view.s;for(let q=-2000;q<3000;q+=STEP){ctx.beginPath();ctx.moveTo(q,-2000);ctx.lineTo(q,3000);ctx.stroke();ctx.beginPath();ctx.moveTo(-2000,q);ctx.lineTo(3000,q);ctx.stroke()}if(pts.length>1){const n=closed?pts.length:pts.length-1;for(let i=0;i<n;i++){const e=E(i);ctx.strokeStyle=measures[i]?"#16823b":"#202938";ctx.lineWidth=(measures[i]?9:7)/view.s;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(e.a.x,e.a.y);ctx.lineTo(e.b.x,e.b.y);ctx.stroke()}}ctx.font=`bold ${20/view.s}px Arial`;pts.forEach((p,i)=>{ctx.fillStyle="#202938";ctx.beginPath();ctx.arc(p.x,p.y,11/view.s,0,Math.PI*2);ctx.fill();ctx.fillStyle="#111";ctx.fillText("P"+(i+1),p.x+15/view.s,p.y-16/view.s)});if(closed){const c=center();for(let i=0;i<pts.length;i++){const e=E(i),mx=(e.a.x+e.b.x)/2,my=(e.a.y+e.b.y)/2;let nx=-e.uy,ny=e.ux;if((mx+nx*20-c.x)**2+(my+ny*20-c.y)**2<(mx-nx*20-c.x)**2+(my-ny*20-c.y)**2){nx=-nx;ny=-ny}const t="K"+(i+1)+(measures[i]?" · "+String(measures[i]).replace(".",",")+" m":"");ctx.font=`bold ${17/view.s}px Arial`;const tx=mx+nx*34/view.s,ty=my+ny*34/view.s,w=ctx.measureText(t).width+12/view.s;ctx.fillStyle="#fffffff0";ctx.fillRect(tx-w/2,ty-18/view.s,w,23/view.s);ctx.fillStyle=measures[i]?"#16823b":"#202938";ctx.textAlign="center";ctx.fillText(t,tx,ty);ctx.textAlign="start"}}
+if(closed){const cc=center();pts.forEach((p,i)=>{const a=angleAt(i);if(a==null)return;let vx=cc.x-p.x,vy=cc.y-p.y,L=Math.hypot(vx,vy)||1;vx/=L;vy/=L;const text=(Math.abs(a-Math.round(a))<.05?Math.round(a):a.toFixed(1).replace(".",","))+"°";ctx.font=`bold ${15/view.s}px Arial`;ctx.textAlign="center";ctx.fillStyle="#8a3d00";ctx.fillText(text,p.x+vx*42/view.s,p.y+vy*42/view.s);ctx.textAlign="start"})}
+ctx.restore()}
+
+function fitView(){
+ if(!pts.length){view={s:1,ox:0,oy:0};draw();return}
+ const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
+ const w=Math.max(1,maxx-minx),h=Math.max(1,maxy-miny),pad=110;
+ view.s=Math.max(.25,Math.min(4,Math.min((cv.width-2*pad)/w,(cv.height-2*pad)/h)));
+ view.ox=(cv.width-w*view.s)/2-minx*view.s;
+ view.oy=(cv.height-h*view.s)/2-miny*view.s;
+ draw()
+}
+function beginPinch(){
+ if(pointers.size!==2)return;
+ const a=[...pointers.values()],p1=a[0],p2=a[1];
+ const cx=(p1.x+p2.x)/2,cy=(p1.y+p2.y)/2,dd=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
+ pinch={d:dd,s:view.s,cx,cy,wx:(cx-view.ox)/view.s,wy:(cy-view.oy)/view.s};
+ gesture=null
+}
+function updatePinch(){
+ if(!pinch||pointers.size!==2)return;
+ const a=[...pointers.values()],p1=a[0],p2=a[1];
+ const cx=(p1.x+p2.x)/2,cy=(p1.y+p2.y)/2,dd=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
+ view.s=Math.max(.25,Math.min(5,pinch.s*dd/pinch.d));
+ view.ox=cx-pinch.wx*view.s;view.oy=cy-pinch.wy*view.s;draw()
+}
+
+function add(p){p=snap(p);if(pts.length>=3&&dist(p,pts[0])<csspx(32)){closed=true;status.textContent="Kontur geschlossen – Kante direkt antippen.";draw();return}pts.push(p);status.textContent="P"+pts.length+" gesetzt.";draw()}
+function openEdge(i){active=i;mtitle.textContent="K"+(i+1)+" – Länge in m";mlen.value=measures[i]||"";modal.classList.add("show");setTimeout(()=>mlen.focus(),60)}
+function close(){modal.classList.remove("show");active=-1}
+cv.addEventListener("pointerdown",e=>{
+ e.preventDefault();
+ const sp=screen(e);pointers.set(e.pointerId,sp);cv.setPointerCapture(e.pointerId);
+ if(pointers.size===2){beginPinch();return}
+ const p=world(e);
+ if(!closed){add(p);return}
+ const pi=pointHit(p);
+ if(pi>=0){gesture={type:"corner",i:pi,mpp:mpp()};return}
+ const ei=edgeHit(p);
+ if(ei>=0){openEdge(ei);return}
+ gesture={type:"pan",sx:sp.x,sy:sp.y,ox:view.ox,oy:view.oy}
+});
+cv.addEventListener("pointermove",e=>{
+ if(!pointers.has(e.pointerId))return;
+ e.preventDefault();const sp=screen(e);pointers.set(e.pointerId,sp);
+ if(pointers.size===2){if(!pinch)beginPinch();updatePinch();return}
+ if(!gesture)return;
+ if(gesture.type==="corner"){
+  const p=world(e),i=gesture.i;pts[i]=p;
+  [(i-1+pts.length)%pts.length,i].forEach(k=>measures[k]=(E(k).L*gesture.mpp).toFixed(2).replace(".",","));
+  draw();return
+ }
+ view.ox=gesture.ox+sp.x-gesture.sx;view.oy=gesture.oy+sp.y-gesture.sy;draw()
+});
+function pointerEnd(e){
+ pointers.delete(e.pointerId);
+ if(pointers.size<2)pinch=null;
+ if(pointers.size===0){if(gesture&&gesture.type==="corner")inferOrthogonalMeasures();gesture=null;draw()}
+}
+cv.addEventListener("pointerup",pointerEnd);
+cv.addEventListener("pointercancel",pointerEnd);
+document.getElementById("save").onclick=()=>{if(active<0)return;const i=active,v=mlen.value.trim();measures[i]=v;if(v){const j=mate(i);if(j>=0&&!measures[j])measures[j]=v;inferOrthogonalMeasures();rebuildFromMeasures(i);inferOrthogonalMeasures()}status.textContent=v?"K"+(i+1)+" = "+v.replace(".",",")+" m übernommen.":"Maß gelöscht.";close();draw()};
+document.getElementById("cancel").onclick=close;modal.addEventListener("pointerdown",e=>{if(e.target===modal)close()});mlen.addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("save").click()});
+document.getElementById("undo").onclick=()=>{if(closed)closed=false;else pts.pop();measures=measures.slice(0,pts.length);draw()};document.getElementById("clear").onclick=()=>{pts=[];measures=[];closed=false;view={s:1,ox:0,oy:0};status.textContent="P1 setzen.";draw()};
+function zoom(f){const cx=cv.width/2,cy=cv.height/2,ns=Math.max(.3,Math.min(4,view.s*f));view.ox=cx-(cx-view.ox)*ns/view.s;view.oy=cy-(cy-view.oy)*ns/view.s;view.s=ns;draw()}document.getElementById("zin").onclick=()=>zoom(1.25);document.getElementById("zout").onclick=()=>zoom(.8);
+document.getElementById("fit").onclick=fitView;draw()})();
+</script></body></html>
