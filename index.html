@@ -7,9 +7,9 @@
 select{width:100%;box-sizing:border-box;margin-top:8px;padding:12px;font-size:17px;border:1px solid #b8c0c8;border-radius:8px;background:white}</style></head><body>
 <div class="app"><div class="card"><h1>Flachdach-Skizze</h1>
 <p class="sub">Punkte setzen → P1 zum Schließen. Kante antippen = Maß · Eckpunkt ziehen = Form · freie Fläche ziehen = Ansicht.</p>
-<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-L1</span></div>
+<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-M1</span></div>
 <div class="wrap"><canvas id="cv" width="1000" height="800"></canvas></div>
-<div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Winkel anpassen</button><button id="attikaBtn">▤ Attika</button><button id="objBtn">＋ Bauteile</button><button id="measureBtn">📏 Maßband</button><button id="view3dBtn">▱ 3D</button></div>
+<div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Winkel anpassen</button><button id="attikaBtn">▤ Attika</button><button id="objBtn">＋ Bauteile</button><button id="measureBtn">📏 Maßband</button><button id="view3dBtn">▱ 3D</button><button id="projectBtn">💾 Projekt</button><button id="pdfBtn">PDF / LV</button></div>
 <div id="status" class="status">P1 setzen.</div></div></div>
 <div id="modal" class="modal"><div class="box"><h2 id="mtitle">Kante – Länge</h2><input id="mlen" inputmode="decimal" placeholder="z. B. 12,00"><div class="actions"><button id="cancel">Abbrechen</button><button id="save">Übernehmen</button></div></div></div>
 <div id="attikaModal" class="modal"><div class="box"><h2>Attika</h2><label>Höhe (cm)</label><input id="attH" inputmode="decimal" value="30"><label>Breite (cm)</label><input id="attB" inputmode="decimal" value="24"><div class="actions"><button id="attCancel">Abbrechen</button><button id="attSave">Übernehmen</button></div></div></div>
@@ -19,10 +19,15 @@ select{width:100%;box-sizing:border-box;margin-top:8px;padding:12px;font-size:17
 <canvas id="cv3d" width="900" height="560" style="width:100%;aspect-ratio:1.6/1;border:1px solid #cbd1d7;border-radius:10px;touch-action:none"></canvas>
 <p style="font-size:13px;margin:8px 0 0">Mit dem Finger drehen · Zwei Finger/Zoom verändern die Ansicht.</p>
 <div class="actions"><button id="close3d">Schließen</button></div></div></div>
+<div id="projectModal" class="modal"><div class="box"><h2>Projekt / Baustelle</h2>
+<label>Adresse / Baustelle</label><input id="projectAddress" placeholder="Adresse">
+<label>Projekt / Kunde</label><input id="projectName" placeholder="Bezeichnung">
+<div class="actions"><button id="projectCancel">Abbrechen</button><button id="projectSave">Speichern</button></div>
+</div></div>
 <script>
 (()=>{"use strict";
 const cv=document.getElementById("cv"),ctx=cv.getContext("2d"),status=document.getElementById("status"),modal=document.getElementById("modal"),mlen=document.getElementById("mlen"),mtitle=document.getElementById("mtitle");
-let pts=[],closed=false,measures=[],gesture=null,active=-1,view={s:1,ox:0,oy:0};const STEP=50;let attika={h:30,b:24};let objects=[];let placing=null,editObj=-1;let objectDrag=null;let attikaModal,objModal,posModal,objType,objFields;let tape={on:false,base:-1,target:-1};const pointers=new Map();let pinch=null;
+let pts=[],closed=false,measures=[],gesture=null,active=-1,view={s:1,ox:0,oy:0};const STEP=50;let attika={h:30,b:24};let objects=[];let placing=null,editObj=-1;let objectDrag=null;let project={address:"",name:""};let attikaModal,objModal,posModal,objType,objFields;let tape={on:false,base:-1,target:-1};const pointers=new Map();let pinch=null;
 const num=v=>Number(String(v||"").replace(",",".")),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function screen(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}}
 function world(e){const p=screen(e);return{x:(p.x-view.ox)/view.s,y:(p.y-view.oy)/view.s}}
@@ -83,6 +88,12 @@ function rebuildFromMeasures(anchor=0){
 }
 function draw(){ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle="#fff";ctx.fillRect(0,0,cv.width,cv.height);ctx.save();ctx.translate(view.ox,view.oy);ctx.scale(view.s,view.s);ctx.strokeStyle="#e6e8eb";ctx.lineWidth=1/view.s;for(let q=-2000;q<3000;q+=STEP){ctx.beginPath();ctx.moveTo(q,-2000);ctx.lineTo(q,3000);ctx.stroke();ctx.beginPath();ctx.moveTo(-2000,q);ctx.lineTo(3000,q);ctx.stroke()}if(pts.length>1){const n=closed?pts.length:pts.length-1;for(let i=0;i<n;i++){const e=E(i);ctx.strokeStyle=measures[i]?"#16823b":"#202938";ctx.lineWidth=measures[i]?7:5;ctx.beginPath();ctx.moveTo(e.a.x,e.a.y);ctx.lineTo(e.b.x,e.b.y);ctx.stroke()}}ctx.font="bold 18px Arial";pts.forEach((p,i)=>{ctx.fillStyle="#202938";ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.fillStyle="#111";ctx.fillText("P"+(i+1),p.x+12,p.y-12)});if(closed){const c=center();for(let i=0;i<pts.length;i++){const e=E(i),mx=(e.a.x+e.b.x)/2,my=(e.a.y+e.b.y)/2;let nx=-e.uy,ny=e.ux;if((mx+nx*30-c.x)**2+(my+ny*30-c.y)**2<(mx-nx*30-c.x)**2+(my-ny*30-c.y)**2){nx=-nx;ny=-ny}const off=45,ax=e.a.x+nx*off,ay=e.a.y+ny*off,bx=e.b.x+nx*off,by=e.b.y+ny*off;ctx.strokeStyle=measures[i]?"#16823b":"#374151";ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(e.a.x+nx*12,e.a.y+ny*12);ctx.lineTo(ax,ay);ctx.moveTo(e.b.x+nx*12,e.b.y+ny*12);ctx.lineTo(bx,by);ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();const ah=10,aw=5;function ar(x,y,dx,dy){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx*ah-dy*aw,y+dy*ah+dx*aw);ctx.lineTo(x+dx*ah+dy*aw,y+dy*ah-dx*aw);ctx.closePath();ctx.fill()}ar(ax,ay,e.ux,e.uy);ar(bx,by,-e.ux,-e.uy);const t="K"+(i+1)+(measures[i]?" · "+String(measures[i]).replace(".",",")+" m":"");ctx.font="bold 18px Arial";ctx.textAlign="center";ctx.textBaseline="middle";const tx=(ax+bx)/2+nx*15,ty=(ay+by)/2+ny*15,w=ctx.measureText(t).width+12;ctx.fillStyle="rgba(255,255,255,.94)";ctx.fillRect(tx-w/2,ty-12,w,24);ctx.fillStyle=measures[i]?"#16823b":"#374151";ctx.fillText(t,tx,ty);ctx.textAlign="start"}const cc=center();pts.forEach((p,i)=>{const ang=angleAt(i);if(ang==null)return;const prev=pts[(i-1+pts.length)%pts.length],next=pts[(i+1)%pts.length];let u={x:prev.x-p.x,y:prev.y-p.y},v={x:next.x-p.x,y:next.y-p.y},lu=Math.hypot(u.x,u.y)||1,lv=Math.hypot(v.x,v.y)||1;u.x/=lu;u.y/=lu;v.x/=lv;v.y/=lv;let bx=u.x+v.x,by=u.y+v.y,bl=Math.hypot(bx,by)||1;bx/=bl;by/=bl;if((p.x+bx*40-cc.x)**2+(p.y+by*40-cc.y)**2>(p.x-bx*40-cc.x)**2+(p.y-by*40-cc.y)**2){bx=-bx;by=-by}const r=28,a1=Math.atan2(u.y,u.x),a2=Math.atan2(v.y,v.x);let d=(a2-a1+Math.PI*2)%(Math.PI*2);if(d>Math.PI)d-=Math.PI*2;const ok=geometryOK(i);ctx.strokeStyle=ok?"#16823b":"#c62828";ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(p.x,p.y,r,a1,a1+d,d<0);ctx.stroke();const text=(Math.abs(ang-Math.round(ang))<.05?Math.round(ang):ang.toFixed(1).replace(".",","))+"°";ctx.font="bold 20px Arial";ctx.textAlign="center";ctx.textBaseline="middle";const tx=p.x+bx*58,ty=p.y+by*58,w=ctx.measureText(text).width+12;ctx.fillStyle="rgba(255,255,255,.94)";ctx.fillRect(tx-w/2,ty-13,w,26);ctx.fillStyle=ok?"#16823b":"#c62828";ctx.fillText(text,tx,ty);ctx.textAlign="start"});
 objects.forEach(o=>{const sc=mpp()||1,p0=pts[0],x=p0.x+o.x/100/sc,y=p0.y+o.y/100/sc;ctx.save();ctx.translate(x,y);ctx.rotate((o.a||0)*Math.PI/180);ctx.strokeStyle="#6b21a8";ctx.fillStyle="rgba(107,33,168,.13)";ctx.lineWidth=2;let w=28,h=28;if(o.type==="Lichtkuppel"||o.type==="Kamin"){w=Math.max(24,(o.w||100)/100/sc);h=Math.max(24,(o.h||100)/100/sc)}if(o.type==="Lüfter"){let r=Math.max(12,(o.d||100)/200/100/sc);ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fill();ctx.stroke()}else{ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeRect(-w/2,-h/2,w,h)}ctx.fillStyle="#4c1d95";ctx.font="bold 15px Arial";ctx.textAlign="center";ctx.fillText(o.type,0,-h/2-10);ctx.restore()})
+objects.forEach(o=>{ensureRefs(o);o.refs.forEach((ri,idx)=>{if(ri<0||ri>=pts.length)return;const R=edgeReference(ri,o),dx=R.p.x-R.q.x,dy=R.p.y-R.q.y,L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;
+ ctx.save();ctx.strokeStyle=idx===0?"#0b63ce":"#00875a";ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=2;ctx.setLineDash([7,5]);ctx.beginPath();ctx.moveTo(R.q.x,R.q.y);ctx.lineTo(R.p.x,R.p.y);ctx.stroke();ctx.setLineDash([]);
+ [R.q,R.p].forEach(P=>{ctx.beginPath();ctx.arc(P.x,P.y,5,0,Math.PI*2);ctx.fill()});
+ const mx=(R.q.x+R.p.x)/2+nx*13,my=(R.q.y+R.p.y)/2+ny*13,txt=`K${ri+1}: ${Math.round(R.cm)} cm`;ctx.font="bold 15px Arial";ctx.textAlign="center";ctx.textBaseline="middle";const tw=ctx.measureText(txt).width;
+ ctx.fillStyle="rgba(255,255,255,.94)";ctx.fillRect(mx-tw/2-5,my-11,tw+10,22);ctx.fillStyle=idx===0?"#0b63ce":"#00875a";ctx.fillText(txt,mx,my);ctx.restore()
+})});
 if(tape.base>=0&&tape.target>=0){
  const a=E(tape.base),b=E(tape.target),A={x:(a.a.x+a.b.x)/2,y:(a.a.y+a.b.y)/2},B={x:(b.a.x+b.b.x)/2,y:(b.a.y+b.b.y)/2};
  const dx=B.x-A.x,dy=B.y-A.y,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L,nx=-uy,ny=ux;
@@ -111,7 +122,7 @@ cv.addEventListener("pointerdown",e=>{
  const sp=screen(e);pointers.set(e.pointerId,sp);cv.setPointerCapture(e.pointerId);
  if(pointers.size===2){beginPinch();return}
  const p=world(e);
- if(placing&&closed){const sc=mpp()||1,p0=pts[0];placing.x=(p.x-p0.x)*sc*100;placing.y=(p.y-p0.y)*sc*100;objects.push(placing);placing=null;status.textContent="Bauteil gesetzt. Antippen für cm-genaue X/Y-Position.";draw();return}
+ if(placing&&closed){const sc=mpp()||1,p0=pts[0];placing.x=(p.x-p0.x)*sc*100;placing.y=(p.y-p0.y)*sc*100;placing.refs=nearestTwoEdges(placing);objects.push(placing);placing=null;status.textContent="Bauteil gesetzt. Zwei Bezugskanten werden live bemaßt.";draw();return}
  if(!closed){add(p);return}
  const th=tapeHandleHit(p);if(th){gesture={type:"tape",which:th};return}
  const oi=objectHit(p);if(oi>=0){objectDrag={i:oi,start:sp,moved:false};gesture={type:"object",i:oi};return}
@@ -164,10 +175,22 @@ attCancel.onclick=()=>attikaModal.classList.remove("show");attSave.onclick=()=>{
 document.getElementById("objBtn").onclick=()=>{objectFields();objModal.classList.add("show")};objCancel.onclick=()=>objModal.classList.remove("show");
 objPlace.onclick=()=>{if(!closed){status.textContent="Erst Dachkontur schließen.";return}const t=objType.value,o={type:t,x:0,y:0};if(t==="Lichtkuppel"||t==="Kamin"){const ew=document.getElementById("ow"),eh=document.getElementById("oh");o.w=num(ew&&ew.value)||100;o.h=num(eh&&eh.value)||100;const ea=document.getElementById("oa");o.a=num(ea&&ea.value)||0}if(t==="Lüfter"){const ed=document.getElementById("od");o.d=num(ed&&ed.value)||100;}placing=o;objModal.classList.remove("show");status.textContent=t+": Position auf der Dachfläche antippen."};
 function objectHit(p){if(!closed)return-1;const sc=mpp()||1,p0=pts[0];for(let i=objects.length-1;i>=0;i--){const o=objects[i],x=p0.x+o.x/100/sc,y=p0.y+o.y/100/sc;if(Math.hypot(p.x-x,p.y-y)<32/view.s)return i}return-1}
-function openPosition(i){editObj=i;const o=objects[i];posTitle.textContent=o.type+" – Position";posX.value=Math.round(o.x);posY.value=Math.round(o.y);let old=document.getElementById("posAngleWrap");if(old)old.remove();if(o.type==="Lichtkuppel"||o.type==="Kamin"){const d=document.createElement("div");d.id="posAngleWrap";d.innerHTML='<label>Drehwinkel (°)</label><input id="posAngle" inputmode="decimal" value="'+(o.a||0)+'">';posY.parentNode.insertBefore(d,posY.nextSibling)}posModal.classList.add("show")}
-posCancel.onclick=()=>{editObj=-1;posModal.classList.remove("show")};posSave.onclick=()=>{if(editObj>=0){objects[editObj].x=num(posX.value)||0;objects[editObj].y=num(posY.value)||0;const pa=document.getElementById("posAngle");if(pa)objects[editObj].a=num(pa.value)||0}editObj=-1;posModal.classList.remove("show");draw()};
+function openPosition(i){editObj=i;const o=objects[i];posTitle.textContent=o.type+" – Position";posX.value=Math.round(o.x);posY.value=Math.round(o.y);let old=document.getElementById("posAngleWrap");if(old)old.remove();old=document.getElementById("posRefsWrap");if(old)old.remove();ensureRefs(o);const rr=document.createElement("div");rr.id="posRefsWrap";rr.innerHTML='<label>Bezugskante 1</label><select id="posRef1">'+pts.map((_,k)=>'<option value="'+k+'" '+(o.refs[0]===k?'selected':'')+'>K'+(k+1)+'</option>').join('')+'</select><label>Bezugskante 2</label><select id="posRef2">'+pts.map((_,k)=>'<option value="'+k+'" '+(o.refs[1]===k?'selected':'')+'>K'+(k+1)+'</option>').join('')+'</select>';posY.parentNode.insertBefore(rr,posY.nextSibling);if(o.type==="Lichtkuppel"||o.type==="Kamin"){const d=document.createElement("div");d.id="posAngleWrap";d.innerHTML='<label>Drehwinkel (°)</label><input id="posAngle" inputmode="decimal" value="'+(o.a||0)+'">';posY.parentNode.insertBefore(d,posY.nextSibling)}posModal.classList.add("show")}
+posCancel.onclick=()=>{editObj=-1;posModal.classList.remove("show")};posSave.onclick=()=>{if(editObj>=0){objects[editObj].x=num(posX.value)||0;objects[editObj].y=num(posY.value)||0;const pa=document.getElementById("posAngle");if(pa)objects[editObj].a=num(pa.value)||0;const r1=document.getElementById("posRef1"),r2=document.getElementById("posRef2");if(r1&&r2)objects[editObj].refs=[+r1.value,+r2.value]}editObj=-1;posModal.classList.remove("show");draw()};
 
 document.getElementById("measureBtn").onclick=()=>{tape.on=!tape.on;tape.base=-1;tape.target=-1;measureBtn.textContent=tape.on?"📏 Bezug wählen":"📏 Maßband";status.textContent=tape.on?"Feste Bezugskante antippen, z. B. K2.":"Maßband beendet.";draw()};
+function edgeReference(i,o){
+ const e=E(i),sc=mpp()||1,p0=pts[0],P={x:p0.x+o.x/100/sc,y:p0.y+o.y/100/sc};
+ const vx=e.b.x-e.a.x,vy=e.b.y-e.a.y,l2=vx*vx+vy*vy||1;
+ let t=((P.x-e.a.x)*vx+(P.y-e.a.y)*vy)/l2;t=Math.max(0,Math.min(1,t));
+ const Q={x:e.a.x+t*vx,y:e.a.y+t*vy};
+ return {p:P,q:Q,cm:Math.hypot(P.x-Q.x,P.y-Q.y)*sc*100}
+}
+function nearestTwoEdges(o){
+ const a=[];for(let i=0;i<pts.length;i++)a.push({i,d:edgeReference(i,o).cm});
+ a.sort((x,y)=>x.d-y.d);return a.slice(0,2).map(x=>x.i)
+}
+function ensureRefs(o){if(!Array.isArray(o.refs)||o.refs.length!==2)o.refs=nearestTwoEdges(o)}
 function tapePointForEdge(i){const e=E(i);return{x:(e.a.x+e.b.x)/2,y:(e.a.y+e.b.y)/2}}
 function tapeHandleHit(p){
  if(!tape.on)return null;
@@ -207,6 +230,18 @@ document.getElementById("close3d").onclick=()=>view3dModal.classList.remove("sho
 cv3d.addEventListener("pointerdown",e=>{e.preventDefault();cv3d.setPointerCapture(e.pointerId);drag3={x:e.clientX,y:e.clientY,rx:rot3.x,rz:rot3.z}});
 cv3d.addEventListener("pointermove",e=>{if(!drag3)return;e.preventDefault();rot3.z=drag3.rz+(e.clientX-drag3.x)*.01;rot3.x=Math.max(-1.45,Math.min(.15,drag3.rx+(e.clientY-drag3.y)*.01));draw3d()});
 cv3d.addEventListener("pointerup",()=>drag3=null);cv3d.addEventListener("pointercancel",()=>drag3=null);
+const projectModal=document.getElementById("projectModal"),projectAddress=document.getElementById("projectAddress"),projectName=document.getElementById("projectName");
+document.getElementById("projectBtn").onclick=()=>{projectAddress.value=project.address||"";projectName.value=project.name||"";projectModal.classList.add("show")};
+document.getElementById("projectCancel").onclick=()=>projectModal.classList.remove("show");
+document.getElementById("projectSave").onclick=()=>{project.address=projectAddress.value.trim();project.name=projectName.value.trim();projectModal.classList.remove("show");try{localStorage.setItem("flachdachProjektM1",JSON.stringify({project,pts,measures,closed,attika,objects}))}catch(e){}status.textContent="Projekt gespeichert.";draw()};
+try{const z=JSON.parse(localStorage.getItem("flachdachProjektM1")||"null");if(z){project=z.project||project;pts=z.pts||pts;measures=z.measures||measures;closed=!!z.closed;attika=z.attika||attika;objects=z.objects||objects}}catch(e){}
+document.getElementById("pdfBtn").onclick=()=>{
+ const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+ const rows=objects.map((o,i)=>{ensureRefs(o);const rs=o.refs.map(r=>`K${r+1}: ${Math.round(edgeReference(r,o).cm)} cm`).join(" / ");let dim="";if(o.type==="Lichtkuppel"||o.type==="Kamin")dim=`${o.w||0} × ${o.h||0} cm${o.a?`, ${o.a}°`:""}`;if(o.type==="Lüfter")dim=`Ø ${o.d||0} mm`;return `<tr><td>${i+1}</td><td>${esc(o.type)}</td><td>${esc(dim)}</td><td>${esc(rs)}</td></tr>`}).join("");
+ const edges=pts.map((_,i)=>`K${i+1}: ${measures[i]?measures[i].replace(".",",")+" m":"–"}`).join(" · ");
+ const w=window.open("","_blank");if(!w){status.textContent="PDF-Fenster wurde blockiert.";return}
+ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Dachskizze / LV</title><style>body{font:14px Arial;margin:28px;color:#111}h1{font-size:22px}h2{font-size:17px;margin-top:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:7px;text-align:left}.muted{color:#555}@media print{button{display:none}}</style></head><body><h1>Dachskizze / Bauteilliste</h1><p><b>Projekt:</b> ${esc(project.name||"–")}<br><b>Adresse:</b> ${esc(project.address||"–")}</p><h2>Dachmaße</h2><p>${esc(edges)}</p><p><b>Attika:</b> Höhe ${attika.h||0} cm · Breite ${attika.b||0} cm</p><h2>Bauteile / LV</h2><table><tr><th>Pos.</th><th>Bauteil</th><th>Abmessung</th><th>Position / Bezugskanten</th></tr>${rows||'<tr><td colspan="4">Keine Bauteile</td></tr>'}</table><p class="muted">Positionsmaße: Abstand der Bauteilmitte zu den zwei gewählten Bezugskanten.</p><button onclick="window.print()">Drucken / als PDF speichern</button></body></html>`);w.document.close()
+};
 document.getElementById("fit").onclick=orthogonalize;draw()})();
 </script>
 </body></html>
