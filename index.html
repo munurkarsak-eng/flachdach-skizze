@@ -7,11 +7,14 @@
 select{width:100%;box-sizing:border-box;margin-top:8px;padding:12px;font-size:17px;border:1px solid #b8c0c8;border-radius:8px;background:white}</style></head><body>
 <div class="app"><div class="card"><h1>Flachdach-Skizze</h1>
 <p class="sub">Punkte setzen → P1 zum Schließen. Kante antippen = Maß · Eckpunkt ziehen = Form · freie Fläche ziehen = Ansicht.</p>
-<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-H2</span></div>
+<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-J1</span></div>
 <div class="wrap"><canvas id="cv" width="1000" height="800"></canvas></div>
 <div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Winkel anpassen</button><button id="attikaBtn">▤ Attika</button><button id="objBtn">＋ Bauteile</button><button id="measureBtn">📏 Maßband</button></div>
 <div id="status" class="status">P1 setzen.</div></div></div>
 <div id="modal" class="modal"><div class="box"><h2 id="mtitle">Kante – Länge</h2><input id="mlen" inputmode="decimal" placeholder="z. B. 12,00"><div class="actions"><button id="cancel">Abbrechen</button><button id="save">Übernehmen</button></div></div></div>
+<div id="attikaModal" class="modal"><div class="box"><h2>Attika</h2><label>Höhe (cm)</label><input id="attH" inputmode="decimal" value="30"><label>Breite (cm)</label><input id="attB" inputmode="decimal" value="24"><div class="actions"><button id="attCancel">Abbrechen</button><button id="attSave">Übernehmen</button></div></div></div>
+<div id="objModal" class="modal"><div class="box"><h2>Bauteil auswählen</h2><select id="objType"><option>Attika-Gully</option><option>Flächengully</option><option>Notentwässerung</option><option>Kamin</option><option>Lüfter</option><option>Lichtkuppel</option></select><div id="objFields"></div><div class="actions"><button id="objCancel">Abbrechen</button><button id="objPlace">Auf Dach setzen</button></div></div></div>
+<div id="posModal" class="modal"><div class="box"><h2 id="posTitle">Genaue Position</h2><label>X ab P1 (cm)</label><input id="posX" inputmode="decimal"><label>Y ab P1 (cm)</label><input id="posY" inputmode="decimal"><div class="actions"><button id="posCancel">Abbrechen</button><button id="posSave">Übernehmen</button></div></div></div>
 <script>
 (()=>{"use strict";
 const cv=document.getElementById("cv"),ctx=cv.getContext("2d"),status=document.getElementById("status"),modal=document.getElementById("modal"),mlen=document.getElementById("mlen"),mtitle=document.getElementById("mtitle");
@@ -131,6 +134,17 @@ function pointerEnd(e){
 }
 cv.addEventListener("pointerup",pointerEnd);
 cv.addEventListener("pointercancel",pointerEnd);
+attikaModal=document.getElementById("attikaModal");objModal=document.getElementById("objModal");posModal=document.getElementById("posModal");objType=document.getElementById("objType");objFields=document.getElementById("objFields");
+function objectFields(){const t=objType.value;if(t==="Lichtkuppel"||t==="Kamin")objFields.innerHTML='<label>Länge (cm)</label><input id="ow" inputmode="decimal" value="100"><label>Breite (cm)</label><input id="oh" inputmode="decimal" value="100">';else if(t==="Lüfter")objFields.innerHTML='<label>Durchmesser (mm)</label><input id="od" inputmode="decimal" value="100">';else objFields.innerHTML=""}
+objType.onchange=objectFields;objectFields();
+document.getElementById("attikaBtn").onclick=()=>{attH.value=attika.h;attB.value=attika.b;attikaModal.classList.add("show")};
+attCancel.onclick=()=>attikaModal.classList.remove("show");attSave.onclick=()=>{attika.h=num(attH.value)||30;attika.b=num(attB.value)||24;attikaModal.classList.remove("show");status.textContent=`Attika Standard: ${attika.h} cm hoch × ${attika.b} cm breit.`};
+document.getElementById("objBtn").onclick=()=>{objectFields();objModal.classList.add("show")};objCancel.onclick=()=>objModal.classList.remove("show");
+objPlace.onclick=()=>{if(!closed){status.textContent="Erst Dachkontur schließen.";return}const t=objType.value,o={type:t,x:0,y:0};if(t==="Lichtkuppel"||t==="Kamin"){const ew=document.getElementById("ow"),eh=document.getElementById("oh");o.w=num(ew&&ew.value)||100;o.h=num(eh&&eh.value)||100}if(t==="Lüfter"){const ed=document.getElementById("od");o.d=num(ed&&ed.value)||100;}placing=o;objModal.classList.remove("show");status.textContent=t+": Position auf der Dachfläche antippen."};
+function objectHit(p){if(!closed)return-1;const sc=mpp()||1,p0=pts[0];for(let i=objects.length-1;i>=0;i--){const o=objects[i],x=p0.x+o.x/100/sc,y=p0.y+o.y/100/sc;if(Math.hypot(p.x-x,p.y-y)<32/view.s)return i}return-1}
+function openPosition(i){editObj=i;const o=objects[i];posTitle.textContent=o.type+" – Position";posX.value=Math.round(o.x);posY.value=Math.round(o.y);posModal.classList.add("show")}
+posCancel.onclick=()=>{editObj=-1;posModal.classList.remove("show")};posSave.onclick=()=>{if(editObj>=0){objects[editObj].x=num(posX.value)||0;objects[editObj].y=num(posY.value)||0}editObj=-1;posModal.classList.remove("show");draw()};
+
 document.getElementById("measureBtn").onclick=()=>{tape.on=!tape.on;tape.base=-1;tape.target=-1;measureBtn.textContent=tape.on?"📏 Bezug wählen":"📏 Maßband";status.textContent=tape.on?"Feste Bezugskante antippen, z. B. K2.":"Maßband beendet.";draw()};
 function tapeEdge(i){
  if(!tape.on)return false;
@@ -143,19 +157,5 @@ document.getElementById("cancel").onclick=close;modal.addEventListener("pointerd
 document.getElementById("undo").onclick=()=>{if(closed)closed=false;else pts.pop();measures=measures.slice(0,pts.length);draw()};document.getElementById("clear").onclick=()=>{pts=[];measures=[];closed=false;view={s:1,ox:0,oy:0};status.textContent="P1 setzen.";draw()};
 function zoom(f){const cx=cv.width/2,cy=cv.height/2,ns=Math.max(.3,Math.min(4,view.s*f));view.ox=cx-(cx-view.ox)*ns/view.s;view.oy=cy-(cy-view.oy)*ns/view.s;view.s=ns;draw()}document.getElementById("zin").onclick=()=>zoom(1.25);document.getElementById("zout").onclick=()=>zoom(.8);
 document.getElementById("fit").onclick=orthogonalize;draw()})();
-</script><div id="attikaModal" class="modal"><div class="box"><h2>Attika</h2><label>Höhe (cm)</label><input id="attH" inputmode="decimal" value="30"><label>Breite (cm)</label><input id="attB" inputmode="decimal" value="24"><div class="actions"><button id="attCancel">Abbrechen</button><button id="attSave">Übernehmen</button></div></div></div>
-<div id="objModal" class="modal"><div class="box"><h2>Bauteil auswählen</h2><select id="objType"><option>Attika-Gully</option><option>Flächengully</option><option>Notentwässerung</option><option>Kamin</option><option>Lüfter</option><option>Lichtkuppel</option></select><div id="objFields"></div><div class="actions"><button id="objCancel">Abbrechen</button><button id="objPlace">Auf Dach setzen</button></div></div></div>
-<div id="posModal" class="modal"><div class="box"><h2 id="posTitle">Genaue Position</h2><label>X ab P1 (cm)</label><input id="posX" inputmode="decimal"><label>Y ab P1 (cm)</label><input id="posY" inputmode="decimal"><div class="actions"><button id="posCancel">Abbrechen</button><button id="posSave">Übernehmen</button></div></div></div><script>
-document.addEventListener("DOMContentLoaded",()=>{attikaModal=document.getElementById("attikaModal");objModal=document.getElementById("objModal");posModal=document.getElementById("posModal");objType=document.getElementById("objType");objFields=document.getElementById("objFields");
-function objectFields(){const t=objType.value;if(t==="Lichtkuppel"||t==="Kamin")objFields.innerHTML='<label>Länge (cm)</label><input id="ow" inputmode="decimal" value="100"><label>Breite (cm)</label><input id="oh" inputmode="decimal" value="100">';else if(t==="Lüfter")objFields.innerHTML='<label>Durchmesser (mm)</label><input id="od" inputmode="decimal" value="100">';else objFields.innerHTML=""}
-objType.onchange=objectFields;objectFields();
-document.getElementById("attikaBtn").onclick=()=>{attH.value=attika.h;attB.value=attika.b;attikaModal.classList.add("show")};
-attCancel.onclick=()=>attikaModal.classList.remove("show");attSave.onclick=()=>{attika.h=num(attH.value)||30;attika.b=num(attB.value)||24;attikaModal.classList.remove("show");status.textContent=`Attika Standard: ${attika.h} cm hoch × ${attika.b} cm breit.`};
-document.getElementById("objBtn").onclick=()=>{objectFields();objModal.classList.add("show")};objCancel.onclick=()=>objModal.classList.remove("show");
-objPlace.onclick=()=>{if(!closed){status.textContent="Erst Dachkontur schließen.";return}const t=objType.value,o={type:t,x:0,y:0};if(t==="Lichtkuppel"||t==="Kamin"){o.w=num(ow.value)||100;o.h=num(oh.value)||100}if(t==="Lüfter")o.d=num(od.value)||100;placing=o;objModal.classList.remove("show");status.textContent=t+": Position auf der Dachfläche antippen."};
-function objectHit(p){if(!closed)return-1;const sc=mpp()||1,p0=pts[0];for(let i=objects.length-1;i>=0;i--){const o=objects[i],x=p0.x+o.x/100/sc,y=p0.y+o.y/100/sc;if(Math.hypot(p.x-x,p.y-y)<32/view.s)return i}return-1}
-function openPosition(i){editObj=i;const o=objects[i];posTitle.textContent=o.type+" – Position";posX.value=Math.round(o.x);posY.value=Math.round(o.y);posModal.classList.add("show")}
-posCancel.onclick=()=>{editObj=-1;posModal.classList.remove("show")};posSave.onclick=()=>{if(editObj>=0){objects[editObj].x=num(posX.value)||0;objects[editObj].y=num(posY.value)||0}editObj=-1;posModal.classList.remove("show");draw()};
-});
 </script>
 </body></html>
