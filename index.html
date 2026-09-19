@@ -7,18 +7,22 @@
 select{width:100%;box-sizing:border-box;margin-top:8px;padding:12px;font-size:17px;border:1px solid #b8c0c8;border-radius:8px;background:white}</style></head><body>
 <div class="app"><div class="card"><h1>Flachdach-Skizze</h1>
 <p class="sub">Punkte setzen → P1 zum Schließen. Kante antippen = Maß · Eckpunkt ziehen = Form · freie Fläche ziehen = Ansicht.</p>
-<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-J1</span></div>
+<div class="top"><label>Raster <input id="grid" inputmode="decimal" value="1"> m</label><span class="version">NEUAUFBAU 19.09.2026-K1</span></div>
 <div class="wrap"><canvas id="cv" width="1000" height="800"></canvas></div>
-<div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Winkel anpassen</button><button id="attikaBtn">▤ Attika</button><button id="objBtn">＋ Bauteile</button><button id="measureBtn">📏 Maßband</button></div>
+<div class="tools"><button id="undo">↶ Letzter Punkt</button><button id="clear">✕ Löschen</button><button id="zin">＋ Zoom</button><button id="zout">− Zoom</button><button id="fit">⊙ Winkel anpassen</button><button id="attikaBtn">▤ Attika</button><button id="objBtn">＋ Bauteile</button><button id="measureBtn">📏 Maßband</button><button id="view3dBtn">▱ 3D</button></div>
 <div id="status" class="status">P1 setzen.</div></div></div>
 <div id="modal" class="modal"><div class="box"><h2 id="mtitle">Kante – Länge</h2><input id="mlen" inputmode="decimal" placeholder="z. B. 12,00"><div class="actions"><button id="cancel">Abbrechen</button><button id="save">Übernehmen</button></div></div></div>
 <div id="attikaModal" class="modal"><div class="box"><h2>Attika</h2><label>Höhe (cm)</label><input id="attH" inputmode="decimal" value="30"><label>Breite (cm)</label><input id="attB" inputmode="decimal" value="24"><div class="actions"><button id="attCancel">Abbrechen</button><button id="attSave">Übernehmen</button></div></div></div>
 <div id="objModal" class="modal"><div class="box"><h2>Bauteil auswählen</h2><select id="objType"><option>Attika-Gully</option><option>Flächengully</option><option>Notentwässerung</option><option>Kamin</option><option>Lüfter</option><option>Lichtkuppel</option></select><div id="objFields"></div><div class="actions"><button id="objCancel">Abbrechen</button><button id="objPlace">Auf Dach setzen</button></div></div></div>
 <div id="posModal" class="modal"><div class="box"><h2 id="posTitle">Genaue Position</h2><label>X ab P1 (cm)</label><input id="posX" inputmode="decimal"><label>Y ab P1 (cm)</label><input id="posY" inputmode="decimal"><div class="actions"><button id="posCancel">Abbrechen</button><button id="posSave">Übernehmen</button></div></div></div>
+<div id="view3dModal" class="modal"><div class="box" style="width:min(760px,100%)"><h2>3D-Dachansicht</h2>
+<canvas id="cv3d" width="900" height="560" style="width:100%;aspect-ratio:1.6/1;border:1px solid #cbd1d7;border-radius:10px;touch-action:none"></canvas>
+<p style="font-size:13px;margin:8px 0 0">Mit dem Finger drehen · Zwei Finger/Zoom verändern die Ansicht.</p>
+<div class="actions"><button id="close3d">Schließen</button></div></div></div>
 <script>
 (()=>{"use strict";
 const cv=document.getElementById("cv"),ctx=cv.getContext("2d"),status=document.getElementById("status"),modal=document.getElementById("modal"),mlen=document.getElementById("mlen"),mtitle=document.getElementById("mtitle");
-let pts=[],closed=false,measures=[],gesture=null,active=-1,view={s:1,ox:0,oy:0};const STEP=50;let attika={h:30,b:24};let objects=[];let placing=null,editObj=-1;let attikaModal,objModal,posModal,objType,objFields;let tape={on:false,base:-1,target:-1};const pointers=new Map();let pinch=null;
+let pts=[],closed=false,measures=[],gesture=null,active=-1,view={s:1,ox:0,oy:0};const STEP=50;let attika={h:30,b:24};let objects=[];let placing=null,editObj=-1;let objectDrag=null;let attikaModal,objModal,posModal,objType,objFields;let tape={on:false,base:-1,target:-1};const pointers=new Map();let pinch=null;
 const num=v=>Number(String(v||"").replace(",",".")),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function screen(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}}
 function world(e){const p=screen(e);return{x:(p.x-view.ox)/view.s,y:(p.y-view.oy)/view.s}}
@@ -108,7 +112,7 @@ cv.addEventListener("pointerdown",e=>{
  const p=world(e);
  if(placing&&closed){const sc=mpp()||1,p0=pts[0];placing.x=(p.x-p0.x)*sc*100;placing.y=(p.y-p0.y)*sc*100;objects.push(placing);placing=null;status.textContent="Bauteil gesetzt. Antippen für cm-genaue X/Y-Position.";draw();return}
  if(!closed){add(p);return}
- const oi=objectHit(p);if(oi>=0){openPosition(oi);return}
+ const oi=objectHit(p);if(oi>=0){objectDrag={i:oi,start:sp,moved:false};gesture={type:"object",i:oi};return}
  const pi=pointHit(p);
  if(pi>=0){gesture={type:"corner",i:pi,mpp:mpp()};return}
  const ei=edgeHit(p);
@@ -120,6 +124,13 @@ cv.addEventListener("pointermove",e=>{
  e.preventDefault();const sp=screen(e);pointers.set(e.pointerId,sp);
  if(pointers.size===2){if(!pinch)beginPinch();updatePinch();return}
  if(!gesture)return;
+ if(gesture.type==="object"){
+   const p=world(e),o=objects[gesture.i],sc=mpp()||1,p0=pts[0];
+   if(objectDrag&&Math.hypot(sp.x-objectDrag.start.x,sp.y-objectDrag.start.y)>8)objectDrag.moved=true;
+   o.x=(p.x-p0.x)*sc*100;o.y=(p.y-p0.y)*sc*100;
+   status.textContent=`${o.type}: ${Math.round(o.x)} cm / ${Math.round(o.y)} cm ab P1`;
+   draw();return
+ }
  if(gesture.type==="corner"){
   const p=world(e),i=gesture.i;pts[i]=p;
   [(i-1+pts.length)%pts.length,i].forEach(k=>measures[k]=(E(k).L*gesture.mpp).toFixed(2).replace(".",","));
@@ -130,7 +141,11 @@ cv.addEventListener("pointermove",e=>{
 function pointerEnd(e){
  pointers.delete(e.pointerId);
  if(pointers.size<2)pinch=null;
- if(pointers.size===0){if(gesture&&gesture.type==="corner")inferOrthogonalMeasures();gesture=null;draw()}
+ if(pointers.size===0){
+   if(gesture&&gesture.type==="corner")inferOrthogonalMeasures();
+   if(gesture&&gesture.type==="object"&&objectDrag&&!objectDrag.moved)openPosition(objectDrag.i);
+   gesture=null;objectDrag=null;draw()
+ }
 }
 cv.addEventListener("pointerup",pointerEnd);
 cv.addEventListener("pointercancel",pointerEnd);
@@ -156,6 +171,27 @@ document.getElementById("save").onclick=()=>{if(active<0)return;const i=active,v
 document.getElementById("cancel").onclick=close;modal.addEventListener("pointerdown",e=>{if(e.target===modal)close()});mlen.addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("save").click()});
 document.getElementById("undo").onclick=()=>{if(closed)closed=false;else pts.pop();measures=measures.slice(0,pts.length);draw()};document.getElementById("clear").onclick=()=>{pts=[];measures=[];closed=false;view={s:1,ox:0,oy:0};status.textContent="P1 setzen.";draw()};
 function zoom(f){const cx=cv.width/2,cy=cv.height/2,ns=Math.max(.3,Math.min(4,view.s*f));view.ox=cx-(cx-view.ox)*ns/view.s;view.oy=cy-(cy-view.oy)*ns/view.s;view.s=ns;draw()}document.getElementById("zin").onclick=()=>zoom(1.25);document.getElementById("zout").onclick=()=>zoom(.8);
+
+const view3dModal=document.getElementById("view3dModal"),cv3d=document.getElementById("cv3d"),c3=cv3d.getContext("2d");
+let rot3={x:-0.75,z:-0.55},drag3=null;
+function draw3d(){
+ c3.clearRect(0,0,cv3d.width,cv3d.height);c3.fillStyle="#f8fafc";c3.fillRect(0,0,cv3d.width,cv3d.height);
+ if(!closed||pts.length<3)return;
+ const sc=mpp()||1,p0=pts[0],H=(attika.h||30)/100/sc,B=(attika.b||24)/100/sc;
+ const cx=pts.reduce((a,p)=>a+p.x,0)/pts.length,cy=pts.reduce((a,p)=>a+p.y,0)/pts.length;
+ function pr(x,y,z){x-=cx;y-=cy;let X=x*Math.cos(rot3.z)-y*Math.sin(rot3.z),Y=x*Math.sin(rot3.z)+y*Math.cos(rot3.z);let Y2=Y*Math.cos(rot3.x)-z*Math.sin(rot3.x),Z=Y*Math.sin(rot3.x)+z*Math.cos(rot3.x);return{x:cv3d.width/2+X*.72,y:cv3d.height/2+Y2*.72-Z*.12}}
+ // roof plane
+ c3.beginPath();pts.forEach((p,i)=>{const q=pr(p.x,p.y,0);i?c3.lineTo(q.x,q.y):c3.moveTo(q.x,q.y)});c3.closePath();c3.fillStyle="#e5e7eb";c3.fill();c3.strokeStyle="#374151";c3.lineWidth=2;c3.stroke();
+ // attika walls
+ for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length],q1=pr(a.x,a.y,0),q2=pr(b.x,b.y,0),q3=pr(b.x,b.y,H),q4=pr(a.x,a.y,H);c3.beginPath();c3.moveTo(q1.x,q1.y);c3.lineTo(q2.x,q2.y);c3.lineTo(q3.x,q3.y);c3.lineTo(q4.x,q4.y);c3.closePath();c3.fillStyle="rgba(148,163,184,.55)";c3.fill();c3.strokeStyle="#64748b";c3.stroke()}
+ // roof objects as raised blocks / markers
+ objects.forEach(o=>{const x=p0.x+o.x/100/sc,y=p0.y+o.y/100/sc;let w=28,h=28,zh=24;if(o.type==="Lichtkuppel"||o.type==="Kamin"){w=(o.w||100)/100/sc;h=(o.h||100)/100/sc;zh=o.type==="Kamin"?70:28}const z=zh/100/sc;const corners=[[x-w/2,y-h/2],[x+w/2,y-h/2],[x+w/2,y+h/2],[x-w/2,y+h/2]];c3.beginPath();corners.forEach((p,i)=>{const q=pr(p[0],p[1],z);i?c3.lineTo(q.x,q.y):c3.moveTo(q.x,q.y)});c3.closePath();c3.fillStyle="rgba(107,33,168,.35)";c3.fill();c3.strokeStyle="#6b21a8";c3.stroke();const t=pr(x,y,z);c3.fillStyle="#4c1d95";c3.font="bold 15px Arial";c3.textAlign="center";c3.fillText(o.type,t.x,t.y-10)});
+}
+document.getElementById("view3dBtn").onclick=()=>{view3dModal.classList.add("show");draw3d()};
+document.getElementById("close3d").onclick=()=>view3dModal.classList.remove("show");
+cv3d.addEventListener("pointerdown",e=>{e.preventDefault();cv3d.setPointerCapture(e.pointerId);drag3={x:e.clientX,y:e.clientY,rx:rot3.x,rz:rot3.z}});
+cv3d.addEventListener("pointermove",e=>{if(!drag3)return;e.preventDefault();rot3.z=drag3.rz+(e.clientX-drag3.x)*.01;rot3.x=Math.max(-1.45,Math.min(.15,drag3.rx+(e.clientY-drag3.y)*.01));draw3d()});
+cv3d.addEventListener("pointerup",()=>drag3=null);cv3d.addEventListener("pointercancel",()=>drag3=null);
 document.getElementById("fit").onclick=orthogonalize;draw()})();
 </script>
 </body></html>
